@@ -1,0 +1,5 @@
+{
+  "name": "GeminiOS",
+  "description": "A simulated desktop operating system environment built with React, featuring a start menu, taskbar, draggable windows, and a variety of applications including a command prompt, app store, and games.",
+  "requestFramePermissions": []
+}
