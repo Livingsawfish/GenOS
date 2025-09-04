@@ -1,7 +1,8 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import type { WindowInstance, AppDefinition } from './types';
+import type { WindowInstance, AppDefinition, Folder as FileSystemFolder, FileSystemNode } from './types';
 import { INITIAL_APPS, DEFAULT_INSTALLED_APPS, WALLPAPERS, ACCENT_COLORS } from './constants';
+import { initialFileSystem, getNodeFromPath } from './system';
 import Desktop from './components/Desktop';
 import Taskbar from './components/Taskbar';
 import Window from './components/Window';
@@ -19,6 +20,7 @@ const App: React.FC = () => {
   const [wallpaper, setWallpaper] = useState(WALLPAPERS[0]);
   const [accentColor, setAccentColor] = useState(ACCENT_COLORS[0].className);
   const [desktopIconPositions, setDesktopIconPositions] = useState<{ [appId: string]: { col: number; row: number } }>({});
+  const [fileSystem, setFileSystem] = useState<FileSystemFolder>(initialFileSystem);
 
   const installedApps = useMemo(() => allApps.filter(app => installedAppIds.includes(app.id)), [allApps, installedAppIds]);
   
@@ -32,7 +34,6 @@ const App: React.FC = () => {
     ).id;
   }, [openWindows]);
 
-  // Effect to calculate and assign desktop icon positions
   useEffect(() => {
     const maxRows = Math.floor((window.innerHeight - TASKBAR_HEIGHT) / GRID_SIZE);
     let nextCol = 0;
@@ -70,8 +71,7 @@ const App: React.FC = () => {
   const bringToFront = useCallback((id: string) => {
     setOpenWindows(windows => {
         const maxZIndex = Math.max(0, ...windows.map(w => w.zIndex));
-        if (maxZIndex > 1000) { // Prevent z-index from growing indefinitely
-            // Renumber z-indexes
+        if (maxZIndex > 1000) {
             const sortedWindows = [...windows].sort((a,b) => a.zIndex - b.zIndex);
             return sortedWindows.map((win, index) => 
                 win.id === id ? {...win, zIndex: sortedWindows.length } : {...win, zIndex: index + 1}
@@ -88,43 +88,69 @@ const App: React.FC = () => {
       if (!window) return;
 
       if (window.state === 'minimized') {
-          // Restore and bring to front
           setOpenWindows(prev => prev.map(win => win.id === id ? { ...win, state: 'normal' } : win));
           bringToFront(id);
       } else {
           if (window.id === activeWindowId) {
-              // Minimize if it's the active window
               minimizeApp(id);
           } else {
-              // Just bring to front if it's not active
               bringToFront(id);
           }
       }
   }, [openWindows, activeWindowId, bringToFront]);
 
 
-  const openApp = useCallback((appId: string) => {
+  const openApp = useCallback((appId: string, options?: { filePath?: string, commandToRun?: string }) => {
     const appDef = allApps.find(app => app.id === appId);
     if (!appDef) return;
 
-    const existingWindow = openWindows.find(win => win.appId === appId);
-    if (existingWindow) {
-      handleTaskbarIconClick(existingWindow.id);
-      return;
+    // Special case: always open a new terminal if a command is specified
+    if (appId !== 'terminal' || !options?.commandToRun) {
+        if (!options?.filePath) {
+          const existingWindow = openWindows.find(win => win.appId === appId && !win.filePath);
+          if (existingWindow) {
+            handleTaskbarIconClick(existingWindow.id);
+            return;
+          }
+        } else {
+           const existingWindow = openWindows.find(win => win.appId === appId && win.filePath === options.filePath);
+           if (existingWindow) {
+            handleTaskbarIconClick(existingWindow.id);
+            return;
+           }
+        }
+    }
+    
+    let windowTitle = appDef.name;
+    let initialContent: string | undefined = undefined;
+
+    if (options?.filePath) {
+        const pathParts = options.filePath.split(/[/\\]/).filter(p => p);
+        const node = getNodeFromPath(pathParts, fileSystem);
+        if (node && node.type === 'file') {
+            const fileName = pathParts[pathParts.length - 1];
+            windowTitle = `${fileName} - ${appDef.name}`;
+            initialContent = node.content;
+        } else {
+            console.error("File not found:", options.filePath);
+        }
     }
 
     const maxZIndex = Math.max(0, ...openWindows.map(w => w.zIndex));
     const newWindow: WindowInstance = {
       id: `win-${Date.now()}`,
       appId: appDef.id,
-      title: appDef.name,
+      title: windowTitle,
       position: { x: Math.random() * 200 + 50, y: Math.random() * 100 + 50 },
       size: appDef.defaultSize || { width: 500, height: 400 },
       zIndex: maxZIndex + 1,
       state: 'normal',
+      filePath: options?.filePath,
+      initialContent: initialContent,
+      commandToRun: options?.commandToRun,
     };
     setOpenWindows(prev => [...prev, newWindow]);
-  }, [openWindows, handleTaskbarIconClick, allApps]);
+  }, [openWindows, handleTaskbarIconClick, allApps, fileSystem]);
 
   const closeApp = useCallback((id: string) => {
     setOpenWindows(prev => prev.filter(win => win.id !== id));
@@ -138,14 +164,14 @@ const App: React.FC = () => {
     setOpenWindows(prev => prev.map(win => {
         if (win.id === id) {
             if (win.state === 'maximized') {
-                return { // Restore
+                return {
                     ...win,
                     state: 'normal',
                     position: win.previousPosition || { x: 50, y: 50 },
                     size: win.previousSize || { width: 500, height: 400 },
                 };
             } else {
-                return { // Maximize
+                return {
                     ...win,
                     state: 'maximized',
                     previousPosition: win.position,
@@ -203,7 +229,7 @@ const App: React.FC = () => {
     }));
   }, []);
 
-  const getAppProps = (appId: string) => {
+  const getAppProps = (appId: string, win: WindowInstance) => {
     switch (appId) {
         case 'appstore':
             return { allApps, installedAppIds, installApp, uninstallApp };
@@ -211,6 +237,14 @@ const App: React.FC = () => {
             return { setWallpaper, currentWallpaper: wallpaper, setAccentColor, accentColor };
         case 'appwizard':
             return { addGeneratedApp };
+        case 'explorer':
+            return { fileSystem, openApp, setFileSystem };
+        case 'terminal':
+            return { fileSystem, setFileSystem, initialCommand: win.commandToRun };
+        case 'editor':
+            return { initialContent: win.initialContent, filePath: win.filePath };
+        case 'browser':
+            return { initialContent: win.initialContent, filePath: win.filePath };
         default:
             return {};
     }
@@ -231,7 +265,7 @@ const App: React.FC = () => {
         const app = allApps.find(app => app.id === win.appId);
         if (!app) return null;
         
-        const appProps = getAppProps(app.id);
+        const appProps = getAppProps(app.id, win);
         const AppToRender = app.component;
 
         return (

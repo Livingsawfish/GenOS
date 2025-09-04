@@ -19,4 +19,20 @@ export interface WindowInstance {
   state: 'normal' | 'minimized' | 'maximized';
   previousPosition?: { x: number; y: number };
   previousSize?: { width: number; height: number };
+  filePath?: string;
+  initialContent?: string;
+  commandToRun?: string;
 }
+
+// File System Types
+export interface File {
+  type: 'file';
+  content: string;
+}
+
+export interface Folder {
+  type: 'folder';
+  children: { [key: string]: File | Folder };
+}
+
+export type FileSystemNode = File | Folder;
