@@ -6,6 +6,12 @@ interface AppWizardProps {
   addGeneratedApp: (appName: string, component: React.ComponentType<any>) => void;
 }
 
+declare global {
+  interface Window {
+    Babel: any;
+  }
+}
+
 const AppWizard: React.FC<AppWizardProps> = ({ addGeneratedApp }) => {
   const [appName, setAppName] = useState('');
   const [appDescription, setAppDescription] = useState('');
@@ -43,23 +49,30 @@ const AppWizard: React.FC<AppWizardProps> = ({ addGeneratedApp }) => {
 
       let responseText = response.text;
       
-      // Find the start of the function component code.
       const startIndex = responseText.indexOf('() => {');
       if (startIndex === -1) {
         throw new Error("AI did not return a component in the expected format.");
       }
       
       let codeBlock = responseText.substring(startIndex);
-
-      // Find the matching closing brace to isolate the function body,
-      // preventing any trailing text from causing a syntax error.
+      
       let braceCount = 0;
       let endIndex = -1;
-      
+      let inString = false;
+      let stringChar = '';
+
       for (let i = 0; i < codeBlock.length; i++) {
-        if (codeBlock[i] === '{') {
+        const char = codeBlock[i];
+        if (inString) {
+          if (char === stringChar && codeBlock[i-1] !== '\\') {
+            inString = false;
+          }
+        } else if (char === "'" || char === '"' || char === '`') {
+          inString = true;
+          stringChar = char;
+        } else if (char === '{') {
           braceCount++;
-        } else if (codeBlock[i] === '}') {
+        } else if (char === '}') {
           braceCount--;
           if (braceCount === 0) {
             endIndex = i;
@@ -74,10 +87,16 @@ const AppWizard: React.FC<AppWizardProps> = ({ addGeneratedApp }) => {
 
       const finalComponentCode = codeBlock.substring(0, endIndex + 1);
 
+      if (!window.Babel) {
+        throw new Error("Babel is not loaded. Cannot transpile dynamic component.");
+      }
 
-      // Unsafe: In a real app, this would be a major security risk.
-      // For this simulated environment, it's how we dynamically create components.
-      const componentFactory = new Function('React', `return (${finalComponentCode})`);
+      const transformedCode = window.Babel.transform(
+        `const TempComponent = ${finalComponentCode};`,
+        { presets: ['react'] }
+      ).code;
+      
+      const componentFactory = new Function('React', `${transformedCode}; return TempComponent;`);
       const GeneratedComponent = componentFactory(React);
 
       addGeneratedApp(appName.trim(), GeneratedComponent);

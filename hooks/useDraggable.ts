@@ -1,14 +1,22 @@
-
 import React from 'react';
 import { useState, useCallback, useEffect } from 'react';
 
 export const useDraggable = (
   id: string, 
-  initialPosition: { x: number; y: number }
+  initialPosition: { x: number; y: number },
+  size: { width: number, height: number },
+  taskbarPosition: 'top' | 'bottom'
 ) => {
   const [position, setPosition] = useState(initialPosition);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  // Sync position with prop if it changes and we are not dragging
+  useEffect(() => {
+    if (!isDragging) {
+      setPosition(initialPosition);
+    }
+  }, [initialPosition, isDragging]);
 
   const onMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     setIsDragging(true);
@@ -24,12 +32,31 @@ export const useDraggable = (
 
   const onMouseMove = useCallback((e: MouseEvent) => {
     if (isDragging) {
-      setPosition({
-        x: e.clientX - dragOffset.x,
-        y: e.clientY - dragOffset.y,
-      });
+      const TASKBAR_HEIGHT = 48;
+      const HEADER_HEIGHT = 32; // Window header height
+      const GRAB_MARGIN = 40;   // How much of the window must stay on screen
+
+      const viewportWidth = window.innerWidth;
+      
+      let newX = e.clientX - dragOffset.x;
+      let newY = e.clientY - dragOffset.y;
+
+      // Clamp Y position
+      if (taskbarPosition === 'top') {
+        newY = Math.max(TASKBAR_HEIGHT, newY);
+        newY = Math.min(window.innerHeight - HEADER_HEIGHT, newY);
+      } else { // bottom
+        newY = Math.max(0, newY);
+        newY = Math.min(window.innerHeight - TASKBAR_HEIGHT - HEADER_HEIGHT, newY);
+      }
+
+      // Clamp X position
+      newX = Math.max(-size.width + GRAB_MARGIN, newX);
+      newX = Math.min(viewportWidth - GRAB_MARGIN, newX);
+
+      setPosition({ x: newX, y: newY });
     }
-  }, [isDragging, dragOffset]);
+  }, [isDragging, dragOffset, size, taskbarPosition]);
 
   const onMouseUp = useCallback(() => {
     setIsDragging(false);

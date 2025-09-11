@@ -29,7 +29,12 @@ const DesktopIcon: React.FC<DesktopIconProps> = ({ app, gridPos, accentColor, on
       }}
     >
       <div className={`w-10 h-10 mb-1 pointer-events-none ${theme.text}`}>{app.icon}</div>
-      <span className="text-xs text-white w-full pointer-events-none">{app.name}</span>
+      <span 
+        className="text-xs text-white dark:text-white w-full pointer-events-none"
+        style={{ textShadow: '1px 1px 3px rgba(0,0,0,0.7)' }}
+      >
+        {app.name}
+      </span>
     </div>
   );
 };

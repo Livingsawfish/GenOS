@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useDraggable } from '../hooks/useDraggable';
 import type { AppDefinition } from '../types';
@@ -10,6 +9,7 @@ interface WindowProps {
   size: { width: number; height: number };
   zIndex: number;
   state: 'normal' | 'minimized' | 'maximized';
+  taskbarPosition: 'top' | 'bottom';
   onClose: (id: string) => void;
   onFocus: (id:string) => void;
   onMinimize: (id: string) => void;
@@ -25,6 +25,7 @@ const Window: React.FC<WindowProps> = ({
   size,
   zIndex,
   state,
+  taskbarPosition,
   onClose,
   onFocus,
   onMinimize,
@@ -32,7 +33,7 @@ const Window: React.FC<WindowProps> = ({
   onSizeChange,
   children
 }) => {
-  const { position: currentPosition, onMouseDown: onDragMouseDown } = useDraggable(id, position);
+  const { position: currentPosition, onMouseDown: onDragMouseDown } = useDraggable(id, position, size, taskbarPosition);
   const [isResizing, setIsResizing] = useState(false);
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
 
@@ -86,7 +87,7 @@ const Window: React.FC<WindowProps> = ({
   return (
     <div
       id={id}
-      className={`absolute flex flex-col bg-gray-800/70 backdrop-blur-md shadow-2xl border border-white/20 ${state === 'maximized' ? 'rounded-none' : 'rounded-lg'}`}
+      className={`absolute flex flex-col bg-white/70 dark:bg-gray-800/70 text-black dark:text-white backdrop-blur-md shadow-2xl border border-black/10 dark:border-white/20 ${state === 'maximized' ? 'rounded-none' : 'rounded-lg'}`}
       style={{
         left: `${currentPosition.x}px`,
         top: `${currentPosition.y}px`,
@@ -98,7 +99,7 @@ const Window: React.FC<WindowProps> = ({
       onMouseDown={() => onFocus(id)}
     >
       <div
-        className={`flex items-center justify-between h-8 px-2 bg-gray-900/50 ${state === 'maximized' ? '' : 'rounded-t-lg'} ${state !== 'maximized' ? 'cursor-move' : ''}`}
+        className={`flex items-center justify-between h-8 px-2 bg-gray-300/50 dark:bg-gray-900/50 ${state === 'maximized' ? '' : 'rounded-t-lg'} ${state !== 'maximized' ? 'cursor-move' : ''}`}
         onMouseDown={handleMouseDown}
         onDoubleClick={() => onMaximize(id)}
       >
@@ -145,7 +146,7 @@ const Window: React.FC<WindowProps> = ({
             onMouseDown={onResizeMouseDown}
             className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize flex items-end justify-end p-px"
           >
-            <div className="w-2 h-2 border-r-2 border-b-2 border-white/50"></div>
+            <div className="w-2 h-2 border-r-2 border-b-2 border-gray-600 dark:border-white/50"></div>
           </div>
         )}
       </div>
